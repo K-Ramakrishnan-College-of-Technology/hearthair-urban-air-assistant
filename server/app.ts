@@ -1,11 +1,13 @@
 import express from 'express';
 import {
   askAirAdvisor,
-  fetchLocalWinterBrief,
-  generateAirQualityPlan,
+  fetchLocalWinterBriefCached,
+  generateAirQualityPlanCached,
+  generateCommunityBriefCached,
 } from './gemini.ts';
 import {
   AskAdvisorSchema,
+  CommunityBriefSchema,
   LocalBriefSchema,
   ProfilePlanSchema,
 } from '../src/lib/sanitizers.ts';
@@ -115,8 +117,9 @@ export function createApiApp(): express.Express {
       }
 
       try {
-        const plan = await generateAirQualityPlan(parsed.data);
-        res.json({ plan });
+        const { data: plan, cached } = await generateAirQualityPlanCached(parsed.data);
+        res.setHeader('X-Cache', cached ? 'HIT' : 'MISS');
+        res.json({ plan, cached });
       } catch (error) {
         const formatted = formatApiError(error);
         res.status(formatted.status).json({ error: formatted.message, code: formatted.code });
@@ -140,11 +143,12 @@ export function createApiApp(): express.Express {
       }
 
       try {
-        const brief = await fetchLocalWinterBrief(
+        const { data: brief, cached } = await fetchLocalWinterBriefCached(
           parsed.data.city,
           parsed.data.neighborhoodType
         );
-        res.json({ brief });
+        res.setHeader('X-Cache', cached ? 'HIT' : 'MISS');
+        res.json({ brief, cached });
       } catch (error) {
         const formatted = formatApiError(error);
         res.status(formatted.status).json({ error: formatted.message, code: formatted.code });
@@ -170,6 +174,32 @@ export function createApiApp(): express.Express {
       try {
         const result = await askAirAdvisor(parsed.data);
         res.json({ result });
+      } catch (error) {
+        const formatted = formatApiError(error);
+        res.status(formatted.status).json({ error: formatted.message, code: formatted.code });
+      }
+    }
+  );
+
+  app.post(
+    '/api/air-assistant/community-brief',
+    checkRateLimit,
+    validateAuthHeaderFormat,
+    async (req, res) => {
+      const rawBody = req.body && typeof req.body === 'object' ? req.body : {};
+      const parsed = CommunityBriefSchema.safeParse(rawBody);
+      if (!parsed.success) {
+        res.status(400).json({
+          error: 'Invalid community brief parameters.',
+          details: parsed.error.issues.map((issue) => issue.message),
+        });
+        return;
+      }
+
+      try {
+        const { data: communityBrief, cached } = await generateCommunityBriefCached(parsed.data);
+        res.setHeader('X-Cache', cached ? 'HIT' : 'MISS');
+        res.json({ communityBrief, cached });
       } catch (error) {
         const formatted = formatApiError(error);
         res.status(formatted.status).json({ error: formatted.message, code: formatted.code });

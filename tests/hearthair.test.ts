@@ -2,8 +2,11 @@ import assert from 'node:assert/strict';
 import type { AddressInfo } from 'node:net';
 import test from 'node:test';
 import { createApiApp } from '../server/app.ts';
+import { TtlLruCache } from '../server/cache.ts';
+import { calculateImpactSimulation } from '../src/lib/impactCalculator.ts';
 import {
   AskAdvisorSchema,
+  CommunityBriefSchema,
   getAqiSeverity,
   ProfilePlanSchema,
   sanitizeForPrompt,
@@ -42,7 +45,7 @@ test('stripUndefined recursively removes undefined properties without mutating v
   assert.equal('notes' in cleaned, false);
 });
 
-test('ProfilePlanSchema and AskAdvisorSchema enforce domain bounds', () => {
+test('ProfilePlanSchema, AskAdvisorSchema, and CommunityBriefSchema enforce domain bounds', () => {
   const validProfile = ProfilePlanSchema.safeParse({
     city: 'Salt Lake City',
     neighborhoodType: 'valley_basin',
@@ -73,6 +76,26 @@ test('ProfilePlanSchema and AskAdvisorSchema enforce domain bounds', () => {
     question: 'Hi',
   });
   assert.equal(shortQuestion.success, false);
+
+  const validCommunity = CommunityBriefSchema.safeParse({
+    city: 'Salt Lake City',
+    aqiLevel: 175,
+    participatingHouseholds: 20,
+    communityWeeklyCo2Kg: 420.5,
+    indoorPm25ReductionPct: 45,
+    focusArea: 'school_zone',
+  });
+  assert.equal(validCommunity.success, true);
+
+  const invalidCommunityFocus = CommunityBriefSchema.safeParse({
+    city: 'Salt Lake City',
+    aqiLevel: 175,
+    participatingHouseholds: 20,
+    communityWeeklyCo2Kg: 420.5,
+    indoorPm25ReductionPct: 45,
+    focusArea: 'unknown_zone',
+  });
+  assert.equal(invalidCommunityFocus.success, false);
 });
 
 test('getAqiSeverity classifies AQI brackets accurately', () => {
@@ -83,7 +106,48 @@ test('getAqiSeverity classifies AQI brackets accurately', () => {
   assert.equal(getAqiSeverity(260).label, 'Severe Inversion Alert');
 });
 
-test('Express API server validates health, input schemas, and auth headers', async () => {
+test('TtlLruCache handles hits, TTL expiration, and LRU eviction', () => {
+  const cache = new TtlLruCache<string>(2, 1000);
+  cache.set('a', 'first', 100);
+  cache.set('b', 'second', 100);
+  // Touch 'a' so 'b' becomes least-recently-used
+  assert.equal(cache.get('a', 200), 'first');
+  cache.set('c', 'third', 200);
+  assert.equal(cache.get('b', 200), undefined);
+  assert.equal(cache.get('a', 200), 'first');
+  assert.equal(cache.get('c', 200), 'third');
+  // Verify TTL expiration
+  assert.equal(cache.get('a', 1500), undefined);
+});
+
+test('calculateImpactSimulation computes bounded household and collective savings', () => {
+  const baseline = calculateImpactSimulation({
+    transitOrCarpoolDaysPerWeek: 0,
+    thermostatSetbackC: 0,
+    indoorFiltrationHoursPerDay: 0,
+    cleanCookingExhaust: false,
+    participatingHouseholds: 1,
+  });
+  assert.equal(baseline.householdWeeklyCo2Kg, 0);
+  assert.equal(baseline.indoorPm25ReductionPct, 0);
+
+  const active = calculateImpactSimulation({
+    transitOrCarpoolDaysPerWeek: 4,
+    thermostatSetbackC: 2,
+    indoorFiltrationHoursPerDay: 12,
+    cleanCookingExhaust: true,
+    participatingHouseholds: 25,
+  });
+  assert.ok(active.householdWeeklyCo2Kg > 40);
+  assert.ok(active.indoorPm25ReductionPct > 50 && active.indoorPm25ReductionPct <= 78);
+  assert.equal(
+    active.communityWeeklyCo2Kg,
+    Number((active.householdWeeklyCo2Kg * 25).toFixed(1))
+  );
+  assert.ok(active.equivalentCarsOffRoadDaily > 10);
+});
+
+test('Express API server validates health, input schemas, community brief, and auth headers', async () => {
   const app = createApiApp();
   const server = await new Promise<import('node:http').Server>((resolve) => {
     const s = app.listen(0, '127.0.0.1', () => resolve(s));
@@ -105,6 +169,13 @@ test('Express API server validates health, input schemas, and auth headers', asy
       body: JSON.stringify({ city: 'X' }),
     });
     assert.equal(badPlanRes.status, 400);
+
+    const badCommunityRes = await fetch(`${baseUrl}/api/air-assistant/community-brief`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ city: 'Denver', participatingHouseholds: 0 }),
+    });
+    assert.equal(badCommunityRes.status, 400);
 
     const badAuthRes = await fetch(`${baseUrl}/api/air-assistant/ask`, {
       method: 'POST',

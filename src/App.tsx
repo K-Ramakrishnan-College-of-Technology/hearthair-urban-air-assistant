@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { onAuthStateChanged, signInWithPopup, signOut, type User } from 'firebase/auth';
+import { CommunityImpactLab } from './components/CommunityImpactLab';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { HeroConfigurator } from './components/HeroConfigurator';
 import { ImpactLedger } from './components/ImpactLedger';
@@ -26,6 +27,7 @@ import {
 import type {
   AdvisorAnswerResult,
   AirQualityPlanResponse,
+  CommunityBriefResult,
   HouseholdProfileInput,
   ImpactLogEntry,
   LocalBriefResult,
@@ -75,6 +77,17 @@ function HearthAirWorkspace() {
   const [pendingRetry, setPendingRetry] = useState<PendingRetryAction | null>(null);
   const [retryingSave, setRetryingSave] = useState(false);
   const [statusAnnouncement, setStatusAnnouncement] = useState('');
+
+  const [generatingCommunityBrief, setGeneratingCommunityBrief] = useState(false);
+  const [communityBrief, setCommunityBrief] = useState<CommunityBriefResult | null>(null);
+  const [communityBriefError, setCommunityBriefError] = useState<string | null>(null);
+  const communityAbortRef = useRef<AbortController | null>(null);
+
+  useEffect(() => {
+    return () => {
+      communityAbortRef.current?.abort();
+    };
+  }, []);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (nextUser) => {
@@ -320,6 +333,49 @@ function HearthAirWorkspace() {
     }
   }
 
+  async function handleGenerateCommunityBrief(params: {
+    focusArea: 'school_zone' | 'apartment_building' | 'neighborhood_block';
+    participatingHouseholds: number;
+    communityWeeklyCo2Kg: number;
+    indoorPm25ReductionPct: number;
+  }) {
+    communityAbortRef.current?.abort();
+    const controller = new AbortController();
+    communityAbortRef.current = controller;
+
+    setGeneratingCommunityBrief(true);
+    setCommunityBriefError(null);
+
+    try {
+      const headers = await getAuthHeaders();
+      const response = await fetch('/api/air-assistant/community-brief', {
+        method: 'POST',
+        headers,
+        signal: controller.signal,
+        body: JSON.stringify({
+          city: profile.city,
+          aqiLevel: profile.aqiLevel,
+          ...params,
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok || !data.communityBrief) {
+        throw new Error(data.error || 'Could not generate neighborhood bulletin.');
+      }
+      setCommunityBrief(data.communityBrief as CommunityBriefResult);
+      setStatusAnnouncement(`Community winter air bulletin ready for ${profile.city}.`);
+    } catch (err) {
+      if (err instanceof Error && err.name === 'AbortError') {
+        return;
+      }
+      setCommunityBriefError(
+        err instanceof Error ? err.message : 'Unable to draft community notice.'
+      );
+    } finally {
+      setGeneratingCommunityBrief(false);
+    }
+  }
+
   async function handleLogAction(entry: {
     actionTitle: string;
     category: 'routine' | 'indoor_hack' | 'sustainable_alt';
@@ -494,6 +550,17 @@ function HearthAirWorkspace() {
           onChangeQuestionInput={setQuestionInput}
           onAskAdvisor={handleAskAdvisor}
           onLogAction={handleLogAction}
+        />
+
+        <CommunityImpactLab
+          profile={profile}
+          plan={activePlan}
+          generatingBrief={generatingCommunityBrief}
+          communityBrief={communityBrief}
+          briefError={communityBriefError}
+          onGenerateCommunityBrief={handleGenerateCommunityBrief}
+          onCommitSimulation={handleLogAction}
+          onAnnounce={setStatusAnnouncement}
         />
 
         <ImpactLedger

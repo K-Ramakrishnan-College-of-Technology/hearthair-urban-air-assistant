@@ -46,6 +46,15 @@ export const AskAdvisorSchema = z.object({
   question: z.string().trim().min(4).max(800),
 });
 
+export const CommunityBriefSchema = z.object({
+  city: z.string().trim().min(2).max(100),
+  aqiLevel: z.number().int().min(0).max(500),
+  participatingHouseholds: z.number().int().min(1).max(200),
+  communityWeeklyCo2Kg: z.number().min(0).max(100000),
+  indoorPm25ReductionPct: z.number().min(0).max(100),
+  focusArea: z.enum(['school_zone', 'apartment_building', 'neighborhood_block']),
+});
+
 export function sanitizeForPrompt(value: string, maxLen: number): string {
   return value
     .replace(/[<>]/g, '')

@@ -50,7 +50,7 @@ export function ImpactLedger({
         <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
           <div className="space-y-1.5">
             <h2 className="text-2xl font-bold tracking-tight text-slate-900">
-              05. Family Impact Ledger & Saved Plans
+              06. Family Impact Ledger & Saved Plans
             </h2>
             <p className="text-sm text-slate-600">
               {user

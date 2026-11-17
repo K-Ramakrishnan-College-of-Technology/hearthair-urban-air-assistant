@@ -126,3 +126,29 @@ export interface ImpactLogEntry {
   createdAt?: unknown;
   updatedAt?: unknown;
 }
+
+export interface ImpactSimulationInputs {
+  transitOrCarpoolDaysPerWeek: number;
+  thermostatSetbackC: number;
+  indoorFiltrationHoursPerDay: number;
+  cleanCookingExhaust: boolean;
+  participatingHouseholds: number;
+}
+
+export interface ImpactSimulationResult {
+  householdWeeklyCo2Kg: number;
+  seasonal90DayCo2Kg: number;
+  indoorPm25ReductionPct: number;
+  cleanAirHoursGainedDaily: number;
+  communityWeeklyCo2Kg: number;
+  equivalentCarsOffRoadDaily: number;
+}
+
+export interface CommunityBriefResult {
+  city: string;
+  title: string;
+  bulletinText: string;
+  actionBullets: string[];
+  collectiveImpactSummary: string;
+}
+

@@ -44,6 +44,12 @@ export function TopBar({ user, authBusy, onSignIn, onSignOut }: TopBarProps) {
             Indoor Hacks
           </a>
           <a
+            href="#community-lab"
+            className="hover:text-slate-900 hover:underline underline-offset-4 transition-colors whitespace-nowrap shrink-0"
+          >
+            Community Lab
+          </a>
+          <a
             href="#impact-ledger"
             className="hover:text-slate-900 hover:underline underline-offset-4 transition-colors whitespace-nowrap shrink-0"
           >
