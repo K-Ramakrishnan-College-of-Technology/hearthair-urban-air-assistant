@@ -1,0 +1,270 @@
+{
+  "entities": {
+    "HouseholdProfile": {
+      "title": "HouseholdProfile",
+      "description": "Household air quality preferences and urban living profile for tailoring winter smog routines.",
+      "type": "object",
+      "properties": {
+        "ownerId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "description": "Authenticated user UID."
+        },
+        "city": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100,
+          "description": "User city or urban district."
+        },
+        "neighborhoodType": {
+          "type": "string",
+          "enum": ["dense_urban", "suburban_arterial", "valley_basin", "industrial_corridor"],
+          "description": "Local urban topography affecting smog dispersion."
+        },
+        "householdSize": {
+          "type": "integer",
+          "description": "Number of household members (1 to 20)."
+        },
+        "hasChildrenOrSeniors": {
+          "type": "boolean",
+          "description": "Whether children, elders, or respiratory-sensitive members live in the home."
+        },
+        "commuteMode": {
+          "type": "string",
+          "enum": ["car_solo", "carpool", "public_transit", "walk_cycle", "remote_hybrid"],
+          "description": "Primary weekday commute mode."
+        },
+        "heatingSource": {
+          "type": "string",
+          "enum": ["gas_furnace", "electric_heat_pump", "wood_pellet_stove", "district_heating", "radiator_boiler"],
+          "description": "Primary winter home heating source."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp of profile creation."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp of last update."
+        }
+      },
+      "required": [
+        "ownerId",
+        "city",
+        "neighborhoodType",
+        "householdSize",
+        "hasChildrenOrSeniors",
+        "commuteMode",
+        "heatingSource",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "AirQualityPlan": {
+      "title": "AirQualityPlan",
+      "description": "AI-generated winter smog daily routines, indoor air quality hacks, sustainable alternatives, and direct impact breakdown.",
+      "type": "object",
+      "properties": {
+        "ownerId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "city": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100
+        },
+        "aqiLevel": {
+          "type": "integer",
+          "description": "Estimated or observed AQI used for this plan (0 to 500)."
+        },
+        "commuteMode": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 40
+        },
+        "heatingSource": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 40
+        },
+        "summary": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2000
+        },
+        "dailyRoutines": {
+          "type": "array",
+          "description": "Up to 8 structured low-emission daily routine actions."
+        },
+        "indoorHacks": {
+          "type": "array",
+          "description": "Up to 8 indoor air quality improvement steps."
+        },
+        "alternatives": {
+          "type": "array",
+          "description": "Up to 6 sustainable lifestyle alternatives."
+        },
+        "impactMetrics": {
+          "type": "object",
+          "description": "Direct measurable impact metrics (CO2 saved, PM2.5 reduction, clean air minutes)."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "ownerId",
+        "city",
+        "aqiLevel",
+        "commuteMode",
+        "heatingSource",
+        "summary",
+        "dailyRoutines",
+        "indoorHacks",
+        "alternatives",
+        "impactMetrics",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "AdvisorInteraction": {
+      "title": "AdvisorInteraction",
+      "description": "Saved user question and Gemini air quality guidance with direct impact takeaway.",
+      "type": "object",
+      "properties": {
+        "ownerId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "city": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100
+        },
+        "question": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1000
+        },
+        "answer": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4000
+        },
+        "impactTakeaway": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 600
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "ownerId",
+        "city",
+        "question",
+        "answer",
+        "impactTakeaway",
+        "createdAt"
+      ]
+    },
+    "ImpactLogEntry": {
+      "title": "ImpactLogEntry",
+      "description": "Daily completed low-emission routine or indoor air hack logged by the family.",
+      "type": "object",
+      "properties": {
+        "ownerId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "dateKey": {
+          "type": "string",
+          "minLength": 10,
+          "maxLength": 10,
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+        },
+        "actionTitle": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 160
+        },
+        "category": {
+          "type": "string",
+          "enum": ["routine", "indoor_hack", "sustainable_alt"]
+        },
+        "co2SavedGrams": {
+          "type": "number"
+        },
+        "pm25ExposureAvoidedPct": {
+          "type": "number"
+        },
+        "completed": {
+          "type": "boolean"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "ownerId",
+        "dateKey",
+        "actionTitle",
+        "category",
+        "co2SavedGrams",
+        "pm25ExposureAvoidedPct",
+        "completed",
+        "createdAt",
+        "updatedAt"
+      ]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": {
+        "$ref": "#/entities/HouseholdProfile"
+      },
+      "description": "Owner-isolated household air quality preferences."
+    },
+    "/users/{userId}/plans/{planId}": {
+      "schema": {
+        "$ref": "#/entities/AirQualityPlan"
+      },
+      "description": "Saved tailored winter smog daily plans."
+    },
+    "/users/{userId}/interactions/{interactionId}": {
+      "schema": {
+        "$ref": "#/entities/AdvisorInteraction"
+      },
+      "description": "Saved family Q&A guidance interactions."
+    },
+    "/users/{userId}/impactLogs/{logId}": {
+      "schema": {
+        "$ref": "#/entities/ImpactLogEntry"
+      },
+      "description": "Daily completed low-emission actions and impact tracking."
+    }
+  }
+}

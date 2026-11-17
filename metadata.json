@@ -1,0 +1,8 @@
+{
+  "name": "HearthAir",
+  "description": "Urban air quality and winter smog family assistant for low-emission daily routines, indoor air hacks, and measurable impact.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

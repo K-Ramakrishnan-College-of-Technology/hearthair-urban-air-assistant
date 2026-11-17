@@ -1,0 +1,200 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Global safety net: deny everything by default
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // --- Shared Security Primitives ---
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isVerifiedUser() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function isOwner(userId) {
+      return isVerifiedUser() && request.auth.uid == userId;
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    // --- Entity Validation Blueprints ---
+    function isValidHouseholdProfile(data, userId) {
+      return data.keys().hasAll([
+          'ownerId', 'city', 'neighborhoodType', 'householdSize',
+          'hasChildrenOrSeniors', 'commuteMode', 'heatingSource',
+          'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'ownerId', 'city', 'neighborhoodType', 'householdSize',
+          'hasChildrenOrSeniors', 'commuteMode', 'heatingSource',
+          'createdAt', 'updatedAt'
+        ])
+        && data.ownerId is string && data.ownerId == userId
+        && data.city is string && data.city.size() >= 1 && data.city.size() <= 100
+        && data.neighborhoodType in ['dense_urban', 'suburban_arterial', 'valley_basin', 'industrial_corridor']
+        && data.householdSize is int && data.householdSize >= 1 && data.householdSize <= 20
+        && data.hasChildrenOrSeniors is bool
+        && data.commuteMode in ['car_solo', 'carpool', 'public_transit', 'walk_cycle', 'remote_hybrid']
+        && data.heatingSource in ['gas_furnace', 'electric_heat_pump', 'wood_pellet_stove', 'district_heating', 'radiator_boiler']
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidAirQualityPlan(data, userId) {
+      return data.keys().hasAll([
+          'ownerId', 'city', 'aqiLevel', 'commuteMode', 'heatingSource',
+          'summary', 'dailyRoutines', 'indoorHacks', 'alternatives',
+          'impactMetrics', 'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'ownerId', 'city', 'aqiLevel', 'commuteMode', 'heatingSource',
+          'summary', 'dailyRoutines', 'indoorHacks', 'alternatives',
+          'impactMetrics', 'createdAt', 'updatedAt'
+        ])
+        && data.ownerId is string && data.ownerId == userId
+        && data.city is string && data.city.size() >= 1 && data.city.size() <= 100
+        && data.aqiLevel is int && data.aqiLevel >= 0 && data.aqiLevel <= 500
+        && data.commuteMode is string && data.commuteMode.size() >= 1 && data.commuteMode.size() <= 40
+        && data.heatingSource is string && data.heatingSource.size() >= 1 && data.heatingSource.size() <= 40
+        && data.summary is string && data.summary.size() >= 1 && data.summary.size() <= 2000
+        && data.dailyRoutines is list && data.dailyRoutines.size() >= 1 && data.dailyRoutines.size() <= 8 && data.dailyRoutines[0] is map
+        && data.indoorHacks is list && data.indoorHacks.size() >= 1 && data.indoorHacks.size() <= 8 && data.indoorHacks[0] is map
+        && data.alternatives is list && data.alternatives.size() >= 1 && data.alternatives.size() <= 6 && data.alternatives[0] is map
+        && data.impactMetrics is map && data.impactMetrics.keys().size() <= 12
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidAdvisorInteraction(data, userId) {
+      return data.keys().hasAll([
+          'ownerId', 'city', 'question', 'answer', 'impactTakeaway', 'createdAt'
+        ])
+        && data.keys().hasOnly([
+          'ownerId', 'city', 'question', 'answer', 'impactTakeaway', 'createdAt'
+        ])
+        && data.ownerId is string && data.ownerId == userId
+        && data.city is string && data.city.size() >= 1 && data.city.size() <= 100
+        && data.question is string && data.question.size() >= 1 && data.question.size() <= 1000
+        && data.answer is string && data.answer.size() >= 1 && data.answer.size() <= 4000
+        && data.impactTakeaway is string && data.impactTakeaway.size() >= 1 && data.impactTakeaway.size() <= 600
+        && data.createdAt is timestamp;
+    }
+
+    function isValidImpactLogEntry(data, userId) {
+      return data.keys().hasAll([
+          'ownerId', 'dateKey', 'actionTitle', 'category',
+          'co2SavedGrams', 'pm25ExposureAvoidedPct', 'completed',
+          'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'ownerId', 'dateKey', 'actionTitle', 'category',
+          'co2SavedGrams', 'pm25ExposureAvoidedPct', 'completed',
+          'createdAt', 'updatedAt'
+        ])
+        && data.ownerId is string && data.ownerId == userId
+        && data.dateKey is string && data.dateKey.size() == 10 && data.dateKey.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$')
+        && data.actionTitle is string && data.actionTitle.size() >= 1 && data.actionTitle.size() <= 160
+        && data.category in ['routine', 'indoor_hack', 'sustainable_alt']
+        && (data.co2SavedGrams is int || data.co2SavedGrams is float) && data.co2SavedGrams >= 0 && data.co2SavedGrams <= 500000
+        && (data.pm25ExposureAvoidedPct is int || data.pm25ExposureAvoidedPct is float) && data.pm25ExposureAvoidedPct >= 0 && data.pm25ExposureAvoidedPct <= 100
+        && data.completed is bool
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    // --- Collection Rules ---
+    match /users/{userId} {
+      allow get: if isValidId(userId) && isOwner(userId);
+      allow list: if false;
+      allow create: if isValidId(userId)
+        && isOwner(userId)
+        && isValidHouseholdProfile(incoming(), userId)
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+      allow update: if isValidId(userId)
+        && isOwner(userId)
+        && isValidHouseholdProfile(incoming(), userId)
+        && incoming().ownerId == existing().ownerId
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && incoming().diff(existing()).affectedKeys().hasOnly([
+          'city', 'neighborhoodType', 'householdSize',
+          'hasChildrenOrSeniors', 'commuteMode', 'heatingSource', 'updatedAt'
+        ]);
+      allow delete: if isValidId(userId) && isOwner(userId);
+
+      match /plans/{planId} {
+        allow get: if isValidId(userId) && isValidId(planId) && isOwner(userId);
+        allow list: if isValidId(userId) && isOwner(userId) && resource.data.ownerId == request.auth.uid;
+        allow create: if isValidId(userId)
+          && isValidId(planId)
+          && isOwner(userId)
+          && isValidAirQualityPlan(incoming(), userId)
+          && incoming().createdAt == request.time
+          && incoming().updatedAt == request.time;
+        allow update: if isValidId(userId)
+          && isValidId(planId)
+          && isOwner(userId)
+          && isValidAirQualityPlan(incoming(), userId)
+          && incoming().ownerId == existing().ownerId
+          && incoming().createdAt == existing().createdAt
+          && incoming().updatedAt == request.time
+          && incoming().diff(existing()).affectedKeys().hasOnly([
+            'city', 'aqiLevel', 'commuteMode', 'heatingSource',
+            'summary', 'dailyRoutines', 'indoorHacks', 'alternatives',
+            'impactMetrics', 'updatedAt'
+          ]);
+        allow delete: if isValidId(userId) && isValidId(planId) && isOwner(userId);
+      }
+
+      match /interactions/{interactionId} {
+        allow get: if isValidId(userId) && isValidId(interactionId) && isOwner(userId);
+        allow list: if isValidId(userId) && isOwner(userId) && resource.data.ownerId == request.auth.uid;
+        allow create: if isValidId(userId)
+          && isValidId(interactionId)
+          && isOwner(userId)
+          && isValidAdvisorInteraction(incoming(), userId)
+          && incoming().createdAt == request.time;
+        allow update: if false;
+        allow delete: if isValidId(userId) && isValidId(interactionId) && isOwner(userId);
+      }
+
+      match /impactLogs/{logId} {
+        allow get: if isValidId(userId) && isValidId(logId) && isOwner(userId);
+        allow list: if isValidId(userId) && isOwner(userId) && resource.data.ownerId == request.auth.uid;
+        allow create: if isValidId(userId)
+          && isValidId(logId)
+          && isOwner(userId)
+          && isValidImpactLogEntry(incoming(), userId)
+          && incoming().createdAt == request.time
+          && incoming().updatedAt == request.time;
+        allow update: if isValidId(userId)
+          && isValidId(logId)
+          && isOwner(userId)
+          && isValidImpactLogEntry(incoming(), userId)
+          && incoming().ownerId == existing().ownerId
+          && incoming().createdAt == existing().createdAt
+          && incoming().updatedAt == request.time
+          && incoming().diff(existing()).affectedKeys().hasOnly([
+            'completed', 'updatedAt'
+          ]);
+        allow delete: if isValidId(userId) && isValidId(logId) && isOwner(userId);
+      }
+    }
+  }
+}
