@@ -80,6 +80,7 @@ export function IndoorHacksAndAdvisor({
                 <button
                   key={tier}
                   type="button"
+                  aria-pressed={costFilter === tier}
                   onClick={() => setCostFilter(tier)}
                   className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors whitespace-nowrap shrink-0 ${
                     costFilter === tier

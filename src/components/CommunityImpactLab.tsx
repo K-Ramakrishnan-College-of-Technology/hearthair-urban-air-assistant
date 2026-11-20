@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { Check, Copy, Download, Loader2, Users } from 'lucide-react';
 import { calculateImpactSimulation } from '../lib/impactCalculator';
+import { formatPlanAsText } from '../lib/planExport';
 import type {
   AirQualityPlanResponse,
   CommunityBriefResult,
@@ -77,40 +78,8 @@ export function CommunityImpactLab({
   }
 
   function handleDownloadSummary() {
-    const lines = [
-      `HearthAir Household & Community Winter Plan — ${plan.city}`,
-      `Target AQI: ${plan.aqiLevel} | Peak Smog Window: ${plan.peakSmogWindow}`,
-      '',
-      'Summary:',
-      plan.summary,
-      '',
-      'Daily Low-Emission Routines:',
-      ...plan.dailyRoutines.map(
-        (r) =>
-          `- [${r.clockRange}] ${r.title}: ${r.action} (-${r.co2SavedGrams}g CO2e, -${r.pm25ExposureAvoidedPct}% PM2.5)`
-      ),
-      '',
-      'Indoor Air Quality Hacks:',
-      ...plan.indoorHacks.map(
-        (h) => `- (${h.costTier}) ${h.title}: ${h.pm25ReductionNote}`
-      ),
-      '',
-      `Simulated Collective Impact (${simInputs.participatingHouseholds} households):`,
-      `- Weekly CO2e Reduced: ${simResult.communityWeeklyCo2Kg} kg/week (${simResult.equivalentCarsOffRoadDaily} cars/day equivalent)`,
-      `- Indoor PM2.5 Exposure Reduction: -${simResult.indoorPm25ReductionPct}%`,
-    ];
-
-    if (communityBrief) {
-      lines.push(
-        '',
-        'Neighborhood Bulletin:',
-        communityBrief.title,
-        communityBrief.bulletinText,
-        ...communityBrief.actionBullets.map((b) => `- ${b}`)
-      );
-    }
-
-    const blob = new Blob([lines.join('\n')], { type: 'text/plain;charset=utf-8' });
+    const content = formatPlanAsText(plan, simInputs, simResult, communityBrief);
+    const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;

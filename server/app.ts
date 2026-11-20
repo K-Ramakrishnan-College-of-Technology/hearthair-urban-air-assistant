@@ -1,4 +1,5 @@
 import express from 'express';
+import type { ZodType } from 'zod';
 import {
   askAirAdvisor,
   fetchLocalWinterBriefCached,
@@ -12,30 +13,51 @@ import {
   ProfilePlanSchema,
 } from '../src/lib/sanitizers.ts';
 
-const rateBucket = new Map<string, { count: number; resetAt: number }>();
+export interface AirAssistantService {
+  generatePlan: typeof generateAirQualityPlanCached;
+  fetchLocalBrief: typeof fetchLocalWinterBriefCached;
+  askAdvisor: typeof askAirAdvisor;
+  generateCommunityBrief: typeof generateCommunityBriefCached;
+}
 
-function checkRateLimit(
-  req: express.Request,
-  res: express.Response,
-  next: express.NextFunction
-): void {
-  const ip = req.ip || 'unknown';
-  const now = Date.now();
-  const entry = rateBucket.get(ip);
-  if (!entry || now > entry.resetAt) {
-    rateBucket.set(ip, { count: 1, resetAt: now + 60_000 });
+export interface ApiAppOptions {
+  service?: AirAssistantService;
+  rateLimitMax?: number;
+}
+
+const DEFAULT_SERVICE: AirAssistantService = {
+  generatePlan: generateAirQualityPlanCached,
+  fetchLocalBrief: fetchLocalWinterBriefCached,
+  askAdvisor: askAirAdvisor,
+  generateCommunityBrief: generateCommunityBriefCached,
+};
+
+function createRateLimiter(maxRequests: number) {
+  const rateBucket = new Map<string, { count: number; resetAt: number }>();
+
+  return (
+    req: express.Request,
+    res: express.Response,
+    next: express.NextFunction
+  ): void => {
+    const ip = req.ip || 'unknown';
+    const now = Date.now();
+    const entry = rateBucket.get(ip);
+    if (!entry || now > entry.resetAt) {
+      rateBucket.set(ip, { count: 1, resetAt: now + 60_000 });
+      next();
+      return;
+    }
+    if (entry.count >= maxRequests) {
+      res.status(429).json({
+        error: 'Too many requests. Please wait a minute before trying again.',
+        code: 'RATE_LIMITED',
+      });
+      return;
+    }
+    entry.count += 1;
     next();
-    return;
-  }
-  if (entry.count >= 30) {
-    res.status(429).json({
-      error: 'Too many requests. Please wait a minute before trying again.',
-      code: 'RATE_LIMITED',
-    });
-    return;
-  }
-  entry.count += 1;
-  next();
+  };
 }
 
 function validateAuthHeaderFormat(
@@ -59,7 +81,7 @@ function validateAuthHeaderFormat(
   next();
 }
 
-function formatApiError(error: unknown): { status: number; message: string; code: string } {
+export function formatApiError(error: unknown): { status: number; message: string; code: string } {
   const msg = error instanceof Error ? error.message : String(error);
   if (/GEMINI_API_KEY/i.test(msg)) {
     return {
@@ -91,8 +113,35 @@ function formatApiError(error: unknown): { status: number; message: string; code
   };
 }
 
-export function createApiApp(): express.Express {
+function createValidatedHandler<TInput>(
+  schema: ZodType<TInput>,
+  invalidMessage: string,
+  handler: (input: TInput, res: express.Response) => Promise<void>
+): express.RequestHandler {
+  return async (req, res) => {
+    const rawBody = req.body && typeof req.body === 'object' ? req.body : {};
+    const parsed = schema.safeParse(rawBody);
+    if (!parsed.success) {
+      res.status(400).json({
+        error: invalidMessage,
+        details: parsed.error.issues.map((issue) => issue.message),
+      });
+      return;
+    }
+
+    try {
+      await handler(parsed.data, res);
+    } catch (error) {
+      const formatted = formatApiError(error);
+      res.status(formatted.status).json({ error: formatted.message, code: formatted.code });
+    }
+  };
+}
+
+export function createApiApp(options: ApiAppOptions = {}): express.Express {
   const app = express();
+  const service = options.service ?? DEFAULT_SERVICE;
+  const checkRateLimit = createRateLimiter(options.rateLimitMax ?? 30);
 
   // Top-level request deserialization MUST be registered before all route handlers
   app.use(express.json({ limit: '1mb' }));
@@ -105,106 +154,62 @@ export function createApiApp(): express.Express {
     '/api/air-assistant/plan',
     checkRateLimit,
     validateAuthHeaderFormat,
-    async (req, res) => {
-      const rawBody = req.body && typeof req.body === 'object' ? req.body : {};
-      const parsed = ProfilePlanSchema.safeParse(rawBody);
-      if (!parsed.success) {
-        res.status(400).json({
-          error: 'Invalid household profile parameters.',
-          details: parsed.error.issues.map((issue) => issue.message),
-        });
-        return;
-      }
-
-      try {
-        const { data: plan, cached } = await generateAirQualityPlanCached(parsed.data);
+    createValidatedHandler(
+      ProfilePlanSchema,
+      'Invalid household profile parameters.',
+      async (input, res) => {
+        const { data: plan, cached } = await service.generatePlan(input);
         res.setHeader('X-Cache', cached ? 'HIT' : 'MISS');
         res.json({ plan, cached });
-      } catch (error) {
-        const formatted = formatApiError(error);
-        res.status(formatted.status).json({ error: formatted.message, code: formatted.code });
       }
-    }
+    )
   );
 
   app.post(
     '/api/air-assistant/local-brief',
     checkRateLimit,
     validateAuthHeaderFormat,
-    async (req, res) => {
-      const rawBody = req.body && typeof req.body === 'object' ? req.body : {};
-      const parsed = LocalBriefSchema.safeParse(rawBody);
-      if (!parsed.success) {
-        res.status(400).json({
-          error: 'Invalid location parameters.',
-          details: parsed.error.issues.map((issue) => issue.message),
-        });
-        return;
-      }
-
-      try {
-        const { data: brief, cached } = await fetchLocalWinterBriefCached(
-          parsed.data.city,
-          parsed.data.neighborhoodType
+    createValidatedHandler(
+      LocalBriefSchema,
+      'Invalid location parameters.',
+      async (input, res) => {
+        const { data: brief, cached } = await service.fetchLocalBrief(
+          input.city,
+          input.neighborhoodType
         );
         res.setHeader('X-Cache', cached ? 'HIT' : 'MISS');
         res.json({ brief, cached });
-      } catch (error) {
-        const formatted = formatApiError(error);
-        res.status(formatted.status).json({ error: formatted.message, code: formatted.code });
       }
-    }
+    )
   );
 
   app.post(
     '/api/air-assistant/ask',
     checkRateLimit,
     validateAuthHeaderFormat,
-    async (req, res) => {
-      const rawBody = req.body && typeof req.body === 'object' ? req.body : {};
-      const parsed = AskAdvisorSchema.safeParse(rawBody);
-      if (!parsed.success) {
-        res.status(400).json({
-          error: 'Please enter a valid question (4 to 800 characters).',
-          details: parsed.error.issues.map((issue) => issue.message),
-        });
-        return;
-      }
-
-      try {
-        const result = await askAirAdvisor(parsed.data);
+    createValidatedHandler(
+      AskAdvisorSchema,
+      'Please enter a valid question (4 to 800 characters).',
+      async (input, res) => {
+        const result = await service.askAdvisor(input);
         res.json({ result });
-      } catch (error) {
-        const formatted = formatApiError(error);
-        res.status(formatted.status).json({ error: formatted.message, code: formatted.code });
       }
-    }
+    )
   );
 
   app.post(
     '/api/air-assistant/community-brief',
     checkRateLimit,
     validateAuthHeaderFormat,
-    async (req, res) => {
-      const rawBody = req.body && typeof req.body === 'object' ? req.body : {};
-      const parsed = CommunityBriefSchema.safeParse(rawBody);
-      if (!parsed.success) {
-        res.status(400).json({
-          error: 'Invalid community brief parameters.',
-          details: parsed.error.issues.map((issue) => issue.message),
-        });
-        return;
-      }
-
-      try {
-        const { data: communityBrief, cached } = await generateCommunityBriefCached(parsed.data);
+    createValidatedHandler(
+      CommunityBriefSchema,
+      'Invalid community brief parameters.',
+      async (input, res) => {
+        const { data: communityBrief, cached } = await service.generateCommunityBrief(input);
         res.setHeader('X-Cache', cached ? 'HIT' : 'MISS');
         res.json({ communityBrief, cached });
-      } catch (error) {
-        const formatted = formatApiError(error);
-        res.status(formatted.status).json({ error: formatted.message, code: formatted.code });
       }
-    }
+    )
   );
 
   return app;

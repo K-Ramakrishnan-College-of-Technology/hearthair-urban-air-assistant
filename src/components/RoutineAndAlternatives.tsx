@@ -63,6 +63,7 @@ export function RoutineAndAlternatives({
                 <button
                   key={key}
                   type="button"
+                  aria-pressed={windowFilter === key}
                   onClick={() => setWindowFilter(key)}
                   className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors whitespace-nowrap shrink-0 ${
                     windowFilter === key

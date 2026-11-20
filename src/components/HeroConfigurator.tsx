@@ -9,6 +9,7 @@ import type {
   NeighborhoodType,
 } from '../types/air';
 import { ResilientImage } from './ResilientImage';
+import { VentilationTimeline } from './VentilationTimeline';
 
 interface HeroConfiguratorProps {
   profile: HouseholdProfileInput;
@@ -356,6 +357,9 @@ export function HeroConfigurator({
             <p className="mt-1 text-xs text-slate-500">Tracked in your family ledger</p>
           </div>
         </div>
+
+        {/* 24-Hour Inversion & Safe Ventilation Window Forecaster */}
+        <VentilationTimeline profile={profile} />
 
         {/* Grounded Local Winter Smog Brief (if requested) */}
         {localBrief && (
